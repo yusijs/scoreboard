@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="no">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1a472a" />
-  <meta name="description" content="Track soccer match scores with persistent history" />
+  <meta name="description" content="Registrer fotballkamper og se historikk" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="ScoreTracker" />
+  <meta name="apple-mobile-web-app-title" content="Resultattavle" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>Soccer Score Tracker</title>
+  <title>Fotball Resultattavle</title>
 </head>
 <body>
   <div id="app">
@@ -19,17 +19,17 @@
     <header class="header">
       <div class="header-content">
         <span class="header-icon">⚽</span>
-        <h1 class="header-title">Score Tracker</h1>
+        <h1 class="header-title">Resultattavle</h1>
       </div>
-      <button id="install-btn" class="install-btn hidden" aria-label="Install app">
-        Install App
+      <button id="install-btn" class="install-btn hidden" aria-label="Installer app">
+        Installer
       </button>
     </header>
 
     <!-- Tab Navigation -->
     <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="live">Live Match</button>
-      <button class="tab-btn" data-tab="history">History</button>
+      <button class="tab-btn active" data-tab="live">Livekamp</button>
+      <button class="tab-btn" data-tab="history">Historikk</button>
     </nav>
 
     <!-- Live Match Tab -->
@@ -38,9 +38,9 @@
       <!-- No active match state -->
       <div id="no-match" class="empty-state">
         <div class="empty-icon">⚽</div>
-        <p class="empty-text">No active match</p>
+        <p class="empty-text">Ingen aktiv kamp</p>
         <button id="new-match-btn" class="btn btn-primary btn-lg">
-          Start New Match
+          Start ny kamp
         </button>
       </div>
 
@@ -50,10 +50,10 @@
           <span id="match-status-badge" class="status-badge status-live">LIVE</span>
           <span id="match-timer-display" class="timer-display">0'</span>
           <div class="timer-controls">
-            <button id="timer-toggle-btn" class="btn btn-sm btn-outline" aria-label="Toggle timer">
+            <button id="timer-toggle-btn" class="btn btn-sm btn-outline" aria-label="Veksle tidtaker">
               ▶ Start
             </button>
-            <button id="half-time-btn" class="btn btn-sm btn-outline">Half Time</button>
+            <button id="half-time-btn" class="btn btn-sm btn-outline">Pause</button>
           </div>
         </div>
 
@@ -61,13 +61,13 @@
           <!-- Home Team -->
           <div class="team home-team">
             <div class="team-name-wrap">
-              <span id="home-team-name" class="team-name">Home</span>
-              <button class="edit-team-btn" data-team="home" aria-label="Edit home team name">✎</button>
+              <span id="home-team-name" class="team-name">Hjemme</span>
+              <button class="edit-team-btn" data-team="home" aria-label="Rediger hjemmelag">✎</button>
             </div>
             <div class="score-controls">
-              <button class="score-btn minus-btn" data-team="home" data-action="minus" aria-label="Decrease home score">−</button>
+              <button class="score-btn minus-btn" data-team="home" data-action="minus" aria-label="Trekk fra hjemmemål">−</button>
               <span id="home-score" class="score">0</span>
-              <button class="score-btn plus-btn" data-team="home" data-action="plus" aria-label="Increase home score">+</button>
+              <button class="score-btn plus-btn" data-team="home" data-action="plus" aria-label="Legg til hjemmemål">+</button>
             </div>
           </div>
 
@@ -76,29 +76,29 @@
           <!-- Away Team -->
           <div class="team away-team">
             <div class="team-name-wrap">
-              <span id="away-team-name" class="team-name">Away</span>
-              <button class="edit-team-btn" data-team="away" aria-label="Edit away team name">✎</button>
+              <span id="away-team-name" class="team-name">Borte</span>
+              <button class="edit-team-btn" data-team="away" aria-label="Rediger bortelag">✎</button>
             </div>
             <div class="score-controls">
-              <button class="score-btn minus-btn" data-team="away" data-action="minus" aria-label="Decrease away score">−</button>
+              <button class="score-btn minus-btn" data-team="away" data-action="minus" aria-label="Trekk fra bortemål">−</button>
               <span id="away-score" class="score">0</span>
-              <button class="score-btn plus-btn" data-team="away" data-action="plus" aria-label="Increase away score">+</button>
+              <button class="score-btn plus-btn" data-team="away" data-action="plus" aria-label="Legg til bortemål">+</button>
             </div>
           </div>
         </div>
 
         <!-- Goal log -->
         <div class="goal-log">
-          <h3 class="goal-log-title">Goal Log</h3>
+          <h3 class="goal-log-title">Mållogg</h3>
           <ul id="goal-log-list" class="goal-log-list">
-            <li class="goal-log-empty">No goals yet</li>
+            <li class="goal-log-empty">Ingen mål ennå</li>
           </ul>
         </div>
 
         <!-- Match actions -->
         <div class="match-actions">
-          <button id="end-match-btn" class="btn btn-danger">End Match</button>
-          <button id="reset-match-btn" class="btn btn-outline">Reset Score</button>
+          <button id="end-match-btn" class="btn btn-danger">Avslutt kamp</button>
+          <button id="reset-match-btn" class="btn btn-outline">Nullstill</button>
         </div>
       </div>
     </main>
@@ -106,12 +106,12 @@
     <!-- History Tab -->
     <main id="tab-history" class="tab-content">
       <div class="history-header">
-        <h2 class="section-title">Match History</h2>
-        <button id="clear-history-btn" class="btn btn-sm btn-danger-outline">Clear All</button>
+        <h2 class="section-title">Kamphistorikk</h2>
+        <button id="clear-history-btn" class="btn btn-sm btn-danger-outline">Slett alt</button>
       </div>
       <div id="history-empty" class="empty-state">
         <div class="empty-icon">📋</div>
-        <p class="empty-text">No matches recorded yet</p>
+        <p class="empty-text">Ingen kamper registrert ennå</p>
       </div>
       <ul id="history-list" class="history-list hidden"></ul>
     </main>
@@ -120,33 +120,33 @@
   <!-- New Match Modal -->
   <div id="new-match-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal">
-      <h2 id="modal-title" class="modal-title">New Match</h2>
+      <h2 id="modal-title" class="modal-title">Ny kamp</h2>
       <form id="new-match-form" novalidate>
         <div class="form-group">
-          <label for="home-team-input" class="form-label">Home Team</label>
+          <label for="home-team-input" class="form-label">Hjemmelag</label>
           <input
             id="home-team-input"
             type="text"
             class="form-input"
-            placeholder="e.g. Manchester City"
+            placeholder="f.eks. Rosenborg"
             maxlength="30"
             required
           />
         </div>
         <div class="form-group">
-          <label for="away-team-input" class="form-label">Away Team</label>
+          <label for="away-team-input" class="form-label">Bortelag</label>
           <input
             id="away-team-input"
             type="text"
             class="form-input"
-            placeholder="e.g. Liverpool"
+            placeholder="f.eks. Molde"
             maxlength="30"
             required
           />
         </div>
         <div class="form-actions">
-          <button type="button" id="modal-cancel-btn" class="btn btn-outline">Cancel</button>
-          <button type="submit" class="btn btn-primary">Kick Off!</button>
+          <button type="button" id="modal-cancel-btn" class="btn btn-outline">Avbryt</button>
+          <button type="submit" class="btn btn-primary">Spark i gang!</button>
         </div>
       </form>
     </div>
@@ -155,10 +155,10 @@
   <!-- Edit Team Name Modal -->
   <div id="edit-team-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
     <div class="modal">
-      <h2 id="edit-modal-title" class="modal-title">Edit Team Name</h2>
+      <h2 id="edit-modal-title" class="modal-title">Rediger lagnavn</h2>
       <form id="edit-team-form" novalidate>
         <div class="form-group">
-          <label for="edit-team-input" class="form-label">Team Name</label>
+          <label for="edit-team-input" class="form-label">Lagnavn</label>
           <input
             id="edit-team-input"
             type="text"
@@ -169,8 +169,8 @@
           <input type="hidden" id="edit-team-side" value="" />
         </div>
         <div class="form-actions">
-          <button type="button" id="edit-modal-cancel-btn" class="btn btn-outline">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" id="edit-modal-cancel-btn" class="btn btn-outline">Avbryt</button>
+          <button type="submit" class="btn btn-primary">Lagre</button>
         </div>
       </form>
     </div>

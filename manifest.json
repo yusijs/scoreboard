@@ -1,7 +1,7 @@
 {
-  "name": "Soccer Score Tracker",
-  "short_name": "ScoreTracker",
-  "description": "Track soccer match scores with persistent history",
+  "name": "Fotball Resultattavle",
+  "short_name": "Resultattavle",
+  "description": "Registrer fotballkamper og se historikk",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a472a",

@@ -98,7 +98,7 @@ function renderActiveMatch() {
   const statusBadge = document.getElementById('match-status-badge');
 
   if (match.halfTime) {
-    timerToggleBtn.textContent = '▶ 2nd Half';
+    timerToggleBtn.textContent = '▶ 2. omgang';
     timerToggleBtn.disabled = false;
     statusBadge.textContent = 'HT';
     statusBadge.className = 'status-badge status-halftime';
@@ -110,8 +110,8 @@ function renderActiveMatch() {
     halfTimeBtn.disabled = false;
     startTimer();
   } else {
-    timerToggleBtn.textContent = match.elapsed === 0 ? '▶ Start' : '▶ Resume';
-    statusBadge.textContent = match.elapsed === 0 ? 'PRE' : 'PAUSED';
+    timerToggleBtn.textContent = match.elapsed === 0 ? '▶ Start' : '▶ Fortsett';
+    statusBadge.textContent = match.elapsed === 0 ? 'PRE' : 'PAUSE';
     statusBadge.className = 'status-badge status-live';
     halfTimeBtn.disabled = match.elapsed === 0;
   }
@@ -125,7 +125,7 @@ function renderGoalLog() {
   const goals = state.activeMatch.goals || [];
 
   if (goals.length === 0) {
-    list.innerHTML = '<li class="goal-log-empty">No goals yet</li>';
+    list.innerHTML = '<li class="goal-log-empty">Ingen mål ennå</li>';
     return;
   }
 
@@ -169,14 +169,14 @@ function renderHistory() {
 
     let homeResult = '', awayResult = '';
     if (m.homeScore > m.awayScore) {
-      homeResult = '<span class="history-winner">Winner</span>';
+      homeResult = '<span class="history-winner">Vinner</span>';
       awayResult = '';
     } else if (m.awayScore > m.homeScore) {
       homeResult = '';
-      awayResult = '<span class="history-winner">Winner</span>';
+      awayResult = '<span class="history-winner">Vinner</span>';
     } else {
-      homeResult = '<span class="history-winner">Draw</span>';
-      awayResult = '<span class="history-winner">Draw</span>';
+      homeResult = '<span class="history-winner">Uavgjort</span>';
+      awayResult = '<span class="history-winner">Uavgjort</span>';
     }
 
     const homeClass = m.homeScore > m.awayScore ? 'winner' : m.homeScore === m.awayScore ? 'draw' : '';
@@ -190,7 +190,7 @@ function renderHistory() {
       <div class="history-item-body">
         <div class="history-team ${homeClass}">
           <div class="history-team-name">${escapeHtml(m.homeTeam)}</div>
-          <div class="history-team-label">Home</div>
+          <div class="history-team-label">Hjemme</div>
           ${homeResult}
         </div>
         <div class="history-score">
@@ -200,7 +200,7 @@ function renderHistory() {
         </div>
         <div class="history-team ${awayClass}">
           <div class="history-team-name">${escapeHtml(m.awayTeam)}</div>
-          <div class="history-team-label">Away</div>
+          <div class="history-team-label">Borte</div>
           ${awayResult}
         </div>
       </div>
@@ -235,7 +235,7 @@ function adjustScore(team, delta) {
 
   if (delta > 0) {
     state.activeMatch.goals.push({ team, elapsed: state.activeMatch.elapsed });
-    showToast(`Goal! ${team === 'home' ? state.activeMatch.homeTeam : state.activeMatch.awayTeam} scores ⚽`);
+    showToast(`Mål! ${team === 'home' ? state.activeMatch.homeTeam : state.activeMatch.awayTeam} scorer ⚽`);
   } else {
     // Remove last goal for that team
     const goals = state.activeMatch.goals;
@@ -273,7 +273,7 @@ function setHalfTime() {
   saveActiveMatch(state.activeMatch);
   stopTimer();
   renderActiveMatch();
-  showToast('Half time!');
+  showToast('Pause!');
 }
 
 function endMatch() {
@@ -289,7 +289,7 @@ function endMatch() {
   stopTimer();
   renderActiveMatch();
   renderHistory();
-  showToast('Match ended and saved!');
+  showToast('Kamp avsluttet og lagret!');
   // Switch to history tab to show the result
   switchTab('history');
 }
@@ -305,14 +305,14 @@ function resetScore() {
   stopTimer();
   saveActiveMatch(state.activeMatch);
   renderActiveMatch();
-  showToast('Score reset');
+  showToast('Poengstilling nullstilt');
 }
 
 function clearHistory() {
   state.history = [];
   saveHistory(state.history);
   renderHistory();
-  showToast('History cleared');
+  showToast('Historikk slettet');
 }
 
 function editTeamName(side) {
@@ -320,7 +320,7 @@ function editTeamName(side) {
   const currentName = side === 'home' ? state.activeMatch.homeTeam : state.activeMatch.awayTeam;
   document.getElementById('edit-team-input').value = currentName;
   document.getElementById('edit-team-side').value = side;
-  document.getElementById('edit-modal-title').textContent = `Edit ${side === 'home' ? 'Home' : 'Away'} Team`;
+  document.getElementById('edit-modal-title').textContent = `Rediger ${side === 'home' ? 'hjemmelag' : 'bortelag'}`;
   openModal('edit-team-modal');
   setTimeout(() => document.getElementById('edit-team-input').focus(), 100);
 }
@@ -377,7 +377,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 window.addEventListener('appinstalled', () => {
   document.getElementById('install-btn').classList.add('hidden');
   deferredInstallPrompt = null;
-  showToast('App installed!');
+  showToast('App installert!');
 });
 
 // ===== Event Listeners =====
@@ -460,17 +460,17 @@ function bindEvents() {
 
   // End / Reset match
   document.getElementById('end-match-btn').addEventListener('click', () => {
-    if (confirm('End this match and save it to history?')) endMatch();
+    if (confirm('Avslutt kampen og lagre i historikken?')) endMatch();
   });
 
   document.getElementById('reset-match-btn').addEventListener('click', () => {
-    if (confirm('Reset the score and timer? This cannot be undone.')) resetScore();
+    if (confirm('Nullstille poengstilling og klokke? Dette kan ikke angres.')) resetScore();
   });
 
   // Clear history
   document.getElementById('clear-history-btn').addEventListener('click', () => {
     if (state.history.length === 0) return;
-    if (confirm('Clear all match history?')) clearHistory();
+    if (confirm('Slette all kamphistorikk?')) clearHistory();
   });
 
   // Install button

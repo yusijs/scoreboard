@@ -275,10 +275,10 @@ body {
 .scoreboard {
   background: var(--green-dark);
   border-radius: var(--radius-lg);
-  padding: 24px 16px;
+  padding: 24px clamp(8px, 3vw, 16px);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(6px, 2vw, 12px);
   box-shadow: var(--shadow-lg);
 }
 
@@ -323,25 +323,25 @@ body {
 .score-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(4px, 2vw, 12px);
 }
 
 .score {
-  font-size: 3.5rem;
+  font-size: clamp(2rem, 11vw, 3.5rem);
   font-weight: 900;
   color: var(--white);
-  min-width: 60px;
+  min-width: clamp(36px, 10vw, 60px);
   text-align: center;
   line-height: 1;
   text-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .score-btn {
-  width: 44px;
-  height: 44px;
+  width: clamp(34px, 10vw, 44px);
+  height: clamp(34px, 10vw, 44px);
   border-radius: 50%;
   border: none;
-  font-size: 1.5rem;
+  font-size: clamp(1.2rem, 5vw, 1.5rem);
   font-weight: 700;
   cursor: pointer;
   display: flex;
@@ -645,9 +645,4 @@ body {
 .goal-log-list::-webkit-scrollbar-track { background: transparent; }
 .goal-log-list::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 2px; }
 
-/* ===== Responsive tweaks ===== */
-@media (max-width: 360px) {
-  .score { font-size: 2.8rem; }
-  .score-btn { width: 38px; height: 38px; }
-  .scoreboard { padding: 18px 10px; gap: 8px; }
-}
+/* Responsive layout is handled via clamp() on .score, .score-btn, and .scoreboard */
