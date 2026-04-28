@@ -38,20 +38,29 @@ function saveHistory(history) {
 
 // ===== State =====
 let state = {
-  activeMatch: null,   // { id, homeTeam, awayTeam, homeScore, awayScore, goals, startedAt, elapsed, timerRunning, halfTime }
+  activeMatch: null,   // { id, homeTeam, awayTeam, homeScore, awayScore, goals, startedAt, elapsed, timerStartedAt, timerRunning, halfTime }
   history: [],
   timerInterval: null,
 };
 
 // ===== Timer =====
+
+// Returns total elapsed seconds, including time since the timer was last started.
+// elapsed stores accumulated seconds from previous running periods;
+// timerStartedAt is the wall-clock ms when the current period began.
+function getElapsedSeconds() {
+  if (!state.activeMatch) return 0;
+  const base = state.activeMatch.elapsed;
+  if (state.activeMatch.timerRunning && state.activeMatch.timerStartedAt) {
+    return base + Math.floor((Date.now() - state.activeMatch.timerStartedAt) / 1000);
+  }
+  return base;
+}
+
 function startTimer() {
   if (state.timerInterval) return;
-  state.timerInterval = setInterval(() => {
-    if (!state.activeMatch || !state.activeMatch.timerRunning) return;
-    state.activeMatch.elapsed += 1;
-    saveActiveMatch(state.activeMatch);
-    renderTimerDisplay();
-  }, 1000);
+  // Interval only drives display refreshes; wall clock is the source of truth.
+  state.timerInterval = setInterval(renderTimerDisplay, 1000);
 }
 
 function stopTimer() {
@@ -61,7 +70,7 @@ function stopTimer() {
 
 function renderTimerDisplay() {
   if (!state.activeMatch) return;
-  const mins = Math.floor(state.activeMatch.elapsed / 60);
+  const mins = Math.floor(getElapsedSeconds() / 60);
   const el = document.getElementById('match-timer-display');
   if (el) el.textContent = `${mins}'`;
 }
@@ -219,6 +228,7 @@ function createMatch(homeTeam, awayTeam) {
     goals: [],
     startedAt: Date.now(),
     elapsed: 0,
+    timerStartedAt: null,
     timerRunning: false,
     halfTime: false,
   };
@@ -234,7 +244,7 @@ function adjustScore(team, delta) {
   state.activeMatch[key] = newScore;
 
   if (delta > 0) {
-    state.activeMatch.goals.push({ team, elapsed: state.activeMatch.elapsed });
+    state.activeMatch.goals.push({ team, elapsed: getElapsedSeconds() });
     showToast(`Mål! ${team === 'home' ? state.activeMatch.homeTeam : state.activeMatch.awayTeam} scorer ⚽`);
   } else {
     // Remove last goal for that team
@@ -255,11 +265,17 @@ function toggleTimer() {
   if (!state.activeMatch) return;
 
   if (state.activeMatch.halfTime) {
-    // Start second half
     state.activeMatch.halfTime = false;
     state.activeMatch.timerRunning = true;
+    state.activeMatch.timerStartedAt = Date.now();
+  } else if (state.activeMatch.timerRunning) {
+    // Freeze accumulated elapsed before pausing
+    state.activeMatch.elapsed = getElapsedSeconds();
+    state.activeMatch.timerStartedAt = null;
+    state.activeMatch.timerRunning = false;
   } else {
-    state.activeMatch.timerRunning = !state.activeMatch.timerRunning;
+    state.activeMatch.timerRunning = true;
+    state.activeMatch.timerStartedAt = Date.now();
   }
 
   saveActiveMatch(state.activeMatch);
@@ -268,6 +284,8 @@ function toggleTimer() {
 
 function setHalfTime() {
   if (!state.activeMatch) return;
+  state.activeMatch.elapsed = getElapsedSeconds();
+  state.activeMatch.timerStartedAt = null;
   state.activeMatch.timerRunning = false;
   state.activeMatch.halfTime = true;
   saveActiveMatch(state.activeMatch);
@@ -280,6 +298,7 @@ function endMatch() {
   if (!state.activeMatch) return;
   const match = {
     ...state.activeMatch,
+    elapsed: getElapsedSeconds(),
     endedAt: Date.now(),
   };
   state.history.push(match);
@@ -300,6 +319,7 @@ function resetScore() {
   state.activeMatch.awayScore = 0;
   state.activeMatch.goals = [];
   state.activeMatch.elapsed = 0;
+  state.activeMatch.timerStartedAt = null;
   state.activeMatch.timerRunning = false;
   state.activeMatch.halfTime = false;
   stopTimer();
@@ -504,8 +524,14 @@ function init() {
   renderHistory();
   registerServiceWorker();
 
-  // Resume timer if match was running when page closed
+  // Resume timer if match was running when page closed.
+  // If timerStartedAt is missing (old saved match), anchor it to now so
+  // getElapsedSeconds() has a valid reference point.
   if (state.activeMatch && state.activeMatch.timerRunning) {
+    if (!state.activeMatch.timerStartedAt) {
+      state.activeMatch.timerStartedAt = Date.now();
+      saveActiveMatch(state.activeMatch);
+    }
     startTimer();
   }
 }
