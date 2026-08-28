@@ -110,13 +110,14 @@ body {
 
 .tab-btn {
   flex: 1;
-  padding: 10px 16px;
+  padding: 10px clamp(6px, 2.5vw, 16px);
   border: 2px solid rgba(255,255,255,0.3);
   background: transparent;
   color: rgba(255,255,255,0.7);
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  font-size: clamp(0.78rem, 3.4vw, 0.9rem);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -661,6 +662,126 @@ body {
 
 .form-actions .btn { flex: 1; }
 
+/* ===== Competition ===== */
+.competition-banner {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green-mid);
+  background: var(--green-pale);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+
+.competition-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--green-dark);
+  background: var(--green-pale);
+  padding: 3px 10px;
+  border-radius: 12px;
+  word-break: break-word;
+}
+
+.form-optional {
+  font-weight: 400;
+  color: var(--gray-400);
+}
+
+/* ===== Planned Matches ===== */
+.planned-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.planned-item {
+  background: var(--white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: slideIn 0.25s ease-out;
+}
+
+.planned-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planned-kickoff {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--green-mid);
+  text-transform: capitalize;
+}
+
+.planned-kickoff.overdue {
+  color: var(--red);
+  text-transform: none;
+}
+
+.planned-delete-btn {
+  background: none;
+  border: none;
+  color: var(--gray-400);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.planned-delete-btn:hover {
+  color: var(--red);
+  background: #ffeef0;
+}
+
+.planned-teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.planned-team {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.planned-vs {
+  color: var(--gray-400);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.planned-competition {
+  text-align: center;
+}
+
+.planned-start-btn {
+  width: 100%;
+}
+
 /* ===== Match Detail Modal ===== */
 .modal-detail {
   max-height: 85vh;
@@ -671,6 +792,11 @@ body {
 .detail-content {
   overflow-y: auto;
   min-height: 0;
+}
+
+.detail-competition {
+  text-align: center;
+  margin-bottom: 12px;
 }
 
 .detail-summary {

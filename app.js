@@ -4,6 +4,7 @@
 const STORAGE_KEYS = {
   activeMatch: 'soccer_active_match',
   history: 'soccer_match_history',
+  planned: 'soccer_planned_matches',
 };
 
 function loadActiveMatch() {
@@ -36,10 +37,24 @@ function saveHistory(history) {
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
 }
 
+function loadPlanned() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.planned);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePlanned(planned) {
+  localStorage.setItem(STORAGE_KEYS.planned, JSON.stringify(planned));
+}
+
 // ===== State =====
 let state = {
   activeMatch: null,   // { id, homeTeam, awayTeam, homeScore, awayScore, goals, startedAt, elapsed, timerStartedAt, timerRunning, halfTime }
   history: [],
+  planned: [],       // upcoming matches: { id, homeTeam, awayTeam, competition, kickoffAt }
   timerInterval: null,
   detailKey: null,   // match currently shown in the detail modal
 };
@@ -91,6 +106,14 @@ function renderActiveMatch() {
 
   noMatch.classList.add('hidden');
   activeEl.classList.remove('hidden');
+
+  const competitionEl = document.getElementById('match-competition');
+  if (match.competition) {
+    competitionEl.textContent = match.competition;
+    competitionEl.classList.remove('hidden');
+  } else {
+    competitionEl.classList.add('hidden');
+  }
 
   document.getElementById('home-team-name').textContent = match.homeTeam;
   document.getElementById('away-team-name').textContent = match.awayTeam;
@@ -221,7 +244,7 @@ function renderHistory() {
         </span>
       </button>
       <div class="history-item-footer">
-        ${goalCount === 1 ? '1 mål' : `${goalCount} mål`} &bull; Trykk for detaljer
+        ${m.competition ? `${escapeHtml(m.competition)} &bull; ` : ''}${goalCount === 1 ? '1 mål' : `${goalCount} mål`} &bull; Trykk for detaljer
       </div>
     </li>`;
   }).join('');
@@ -279,7 +302,12 @@ function buildMatchDetailHtml(m) {
     ? `<ul class="timeline">${timeline}</ul>`
     : '<p class="detail-empty">Ingen mål i denne kampen</p>';
 
+  const competitionBlock = m.competition
+    ? `<div class="detail-competition"><span class="competition-tag">${escapeHtml(m.competition)}</span></div>`
+    : '';
+
   return `
+    ${competitionBlock}
     <div class="detail-summary">
       <div class="detail-team">${escapeHtml(m.homeTeam)}</div>
       <div class="detail-score">${m.homeScore}–${m.awayScore}</div>
@@ -300,12 +328,136 @@ function deleteMatch(key) {
   showToast('Kamp slettet');
 }
 
+// ===== Planned Matches =====
+
+// datetime-local wants "YYYY-MM-DDTHH:mm" in local time.
+function toDatetimeLocalValue(ms) {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Default a new plan to the next whole hour.
+function defaultKickoff() {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
+function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function formatKickoff(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  if (isSameDay(d, now)) return `I dag ${time}`;
+  if (isSameDay(d, tomorrow)) return `I morgen ${time}`;
+
+  const date = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${date} ${time}`;
+}
+
+function renderPlanned() {
+  const listEl = document.getElementById('planned-list');
+  const emptyEl = document.getElementById('planned-empty');
+
+  if (state.planned.length === 0) {
+    listEl.classList.add('hidden');
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+
+  emptyEl.classList.add('hidden');
+  listEl.classList.remove('hidden');
+
+  const sorted = state.planned.slice().sort((a, b) => a.kickoffAt - b.kickoffAt);
+
+  listEl.innerHTML = sorted.map((p) => {
+    const id = escapeHtml(String(p.id));
+    const overdue = p.kickoffAt < Date.now();
+    const competition = p.competition
+      ? `<span class="competition-tag">${escapeHtml(p.competition)}</span>`
+      : '';
+
+    return `<li class="planned-item">
+      <div class="planned-item-header">
+        <span class="planned-kickoff ${overdue ? 'overdue' : ''}">
+          ${escapeHtml(formatKickoff(p.kickoffAt))}${overdue ? ' &bull; forfalt' : ''}
+        </span>
+        <button class="planned-delete-btn" data-plan-action="delete" data-plan-id="${id}"
+                aria-label="Slett planlagt kamp" title="Slett">✕</button>
+      </div>
+      <div class="planned-teams">
+        <span class="planned-team">${escapeHtml(p.homeTeam)}</span>
+        <span class="planned-vs">–</span>
+        <span class="planned-team">${escapeHtml(p.awayTeam)}</span>
+      </div>
+      ${competition ? `<div class="planned-competition">${competition}</div>` : ''}
+      <button class="btn btn-primary btn-sm planned-start-btn" data-plan-action="start" data-plan-id="${id}">
+        Start kamp
+      </button>
+    </li>`;
+  }).join('');
+}
+
+function addPlannedMatch(homeTeam, awayTeam, competition, kickoffAt) {
+  state.planned.push({
+    id: Date.now().toString(),
+    homeTeam: homeTeam.trim(),
+    awayTeam: awayTeam.trim(),
+    competition: competition.trim(),
+    kickoffAt,
+  });
+  savePlanned(state.planned);
+  renderPlanned();
+  showToast('Kamp planlagt');
+}
+
+function deletePlannedMatch(id) {
+  const idx = state.planned.findIndex((p) => String(p.id) === id);
+  if (idx === -1) return;
+  state.planned.splice(idx, 1);
+  savePlanned(state.planned);
+  renderPlanned();
+  showToast('Planlagt kamp slettet');
+}
+
+function startPlannedMatch(id) {
+  const p = state.planned.find((x) => String(x.id) === id);
+  if (!p) return;
+
+  // Only one match can be live at a time.
+  if (state.activeMatch) {
+    showToast('Avslutt den aktive kampen først');
+    return;
+  }
+
+  createMatch(p.homeTeam, p.awayTeam, p.competition);
+
+  // Consume the plan without the "deleted" toast that deletePlannedMatch shows.
+  state.planned = state.planned.filter((x) => String(x.id) !== id);
+  savePlanned(state.planned);
+  renderPlanned();
+
+  switchTab('live');
+  showToast('Kampen er i gang');
+}
+
 // ===== Actions =====
-function createMatch(homeTeam, awayTeam) {
+function createMatch(homeTeam, awayTeam, competition) {
   state.activeMatch = {
     id: Date.now().toString(),
     homeTeam: homeTeam.trim(),
     awayTeam: awayTeam.trim(),
+    competition: (competition || '').trim(),
     homeScore: 0,
     awayScore: 0,
     goals: [],
@@ -494,8 +646,67 @@ function bindEvents() {
   document.getElementById('new-match-btn').addEventListener('click', () => {
     document.getElementById('home-team-input').value = '';
     document.getElementById('away-team-input').value = '';
+    document.getElementById('competition-input').value = '';
     openModal('new-match-modal');
     setTimeout(() => document.getElementById('home-team-input').focus(), 100);
+  });
+
+  // Plan match buttons (header + empty state)
+  const openPlanModal = () => {
+    document.getElementById('plan-home-input').value = '';
+    document.getElementById('plan-away-input').value = '';
+    document.getElementById('plan-competition-input').value = '';
+    document.getElementById('plan-kickoff-input').value = toDatetimeLocalValue(defaultKickoff());
+    openModal('plan-match-modal');
+    setTimeout(() => document.getElementById('plan-home-input').focus(), 100);
+  };
+  document.getElementById('plan-match-btn').addEventListener('click', openPlanModal);
+  document.getElementById('plan-match-empty-btn').addEventListener('click', openPlanModal);
+
+  // Plan match form submit
+  document.getElementById('plan-match-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const homeInput = document.getElementById('plan-home-input');
+    const awayInput = document.getElementById('plan-away-input');
+    const kickoffInput = document.getElementById('plan-kickoff-input');
+    const competition = document.getElementById('plan-competition-input').value;
+
+    const home = homeInput.value.trim();
+    const away = awayInput.value.trim();
+    const kickoffAt = kickoffInput.value ? new Date(kickoffInput.value).getTime() : NaN;
+
+    [homeInput, awayInput, kickoffInput].forEach((i) => i.classList.remove('error'));
+
+    let valid = true;
+    if (!home) { homeInput.classList.add('error'); valid = false; }
+    if (!away) { awayInput.classList.add('error'); valid = false; }
+    if (!kickoffInput.value || Number.isNaN(kickoffAt)) { kickoffInput.classList.add('error'); valid = false; }
+    if (!valid) return;
+
+    closeModal('plan-match-modal');
+    addPlannedMatch(home, away, competition, kickoffAt);
+  });
+
+  document.getElementById('plan-modal-cancel-btn').addEventListener('click', () => closeModal('plan-match-modal'));
+  document.getElementById('plan-match-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal('plan-match-modal');
+  });
+
+  // Planned list: start or delete a planned match
+  document.getElementById('planned-list').addEventListener('click', (e) => {
+    const target = e.target.closest('[data-plan-action]');
+    if (!target) return;
+    const id = target.dataset.planId;
+
+    if (target.dataset.planAction === 'start') {
+      startPlannedMatch(id);
+    } else if (target.dataset.planAction === 'delete') {
+      const p = state.planned.find((x) => String(x.id) === id);
+      if (!p) return;
+      if (confirm(`Slette den planlagte kampen ${p.homeTeam} – ${p.awayTeam}?`)) {
+        deletePlannedMatch(id);
+      }
+    }
   });
 
   // New match form submit
@@ -515,7 +726,7 @@ function bindEvents() {
     if (!valid) return;
 
     closeModal('new-match-modal');
-    createMatch(home, away);
+    createMatch(home, away, document.getElementById('competition-input').value);
   });
 
   // Modal cancel
@@ -642,9 +853,11 @@ function registerServiceWorker() {
 function init() {
   state.activeMatch = loadActiveMatch();
   state.history = loadHistory();
+  state.planned = loadPlanned();
 
   bindEvents();
   renderActiveMatch();
+  renderPlanned();
   renderHistory();
   registerServiceWorker();
 
