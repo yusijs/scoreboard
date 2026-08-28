@@ -56,7 +56,8 @@ let state = {
   history: [],
   planned: [],       // upcoming matches: { id, homeTeam, awayTeam, competition, kickoffAt }
   timerInterval: null,
-  detailKey: null,   // match currently shown in the detail modal
+  detailKey: null,      // match currently shown in the detail modal
+  editingPlanId: null,  // plan being edited, null when planning a new match
 };
 
 // ===== Timer =====
@@ -392,8 +393,12 @@ function renderPlanned() {
         <span class="planned-kickoff ${overdue ? 'overdue' : ''}">
           ${escapeHtml(formatKickoff(p.kickoffAt))}${overdue ? ' &bull; forfalt' : ''}
         </span>
-        <button class="planned-delete-btn" data-plan-action="delete" data-plan-id="${id}"
-                aria-label="Slett planlagt kamp" title="Slett">✕</button>
+        <span class="planned-actions">
+          <button class="planned-icon-btn" data-plan-action="edit" data-plan-id="${id}"
+                  aria-label="Rediger planlagt kamp" title="Rediger">✎</button>
+          <button class="planned-icon-btn planned-delete-btn" data-plan-action="delete" data-plan-id="${id}"
+                  aria-label="Slett planlagt kamp" title="Slett">✕</button>
+        </span>
       </div>
       <div class="planned-teams">
         <span class="planned-team">${escapeHtml(p.homeTeam)}</span>
@@ -406,6 +411,45 @@ function renderPlanned() {
       </button>
     </li>`;
   }).join('');
+}
+
+// Opens the plan modal. Pass a plan to edit it, or nothing to create one.
+function openPlanModal(plan) {
+  state.editingPlanId = plan ? String(plan.id) : null;
+
+  document.getElementById('plan-home-input').value = plan ? plan.homeTeam : '';
+  document.getElementById('plan-away-input').value = plan ? plan.awayTeam : '';
+  document.getElementById('plan-competition-input').value = plan ? (plan.competition || '') : '';
+  document.getElementById('plan-kickoff-input').value =
+    toDatetimeLocalValue(plan ? plan.kickoffAt : defaultKickoff());
+
+  document.getElementById('plan-modal-title').textContent = plan ? 'Rediger kamp' : 'Planlegg kamp';
+  document.getElementById('plan-submit-btn').textContent = plan ? 'Lagre endringer' : 'Lagre';
+
+  ['plan-home-input', 'plan-away-input', 'plan-kickoff-input']
+    .forEach((id) => document.getElementById(id).classList.remove('error'));
+
+  openModal('plan-match-modal');
+  setTimeout(() => document.getElementById('plan-home-input').focus(), 100);
+}
+
+function closePlanModal() {
+  closeModal('plan-match-modal');
+  state.editingPlanId = null;
+}
+
+function updatePlannedMatch(id, homeTeam, awayTeam, competition, kickoffAt) {
+  const plan = state.planned.find((p) => String(p.id) === String(id));
+  if (!plan) return;
+
+  plan.homeTeam = homeTeam.trim();
+  plan.awayTeam = awayTeam.trim();
+  plan.competition = competition.trim();
+  plan.kickoffAt = kickoffAt;
+
+  savePlanned(state.planned);
+  renderPlanned();
+  showToast('Kamp oppdatert');
 }
 
 function addPlannedMatch(homeTeam, awayTeam, competition, kickoffAt) {
@@ -652,16 +696,8 @@ function bindEvents() {
   });
 
   // Plan match buttons (header + empty state)
-  const openPlanModal = () => {
-    document.getElementById('plan-home-input').value = '';
-    document.getElementById('plan-away-input').value = '';
-    document.getElementById('plan-competition-input').value = '';
-    document.getElementById('plan-kickoff-input').value = toDatetimeLocalValue(defaultKickoff());
-    openModal('plan-match-modal');
-    setTimeout(() => document.getElementById('plan-home-input').focus(), 100);
-  };
-  document.getElementById('plan-match-btn').addEventListener('click', openPlanModal);
-  document.getElementById('plan-match-empty-btn').addEventListener('click', openPlanModal);
+  document.getElementById('plan-match-btn').addEventListener('click', () => openPlanModal());
+  document.getElementById('plan-match-empty-btn').addEventListener('click', () => openPlanModal());
 
   // Plan match form submit
   document.getElementById('plan-match-form').addEventListener('submit', (e) => {
@@ -683,13 +719,19 @@ function bindEvents() {
     if (!kickoffInput.value || Number.isNaN(kickoffAt)) { kickoffInput.classList.add('error'); valid = false; }
     if (!valid) return;
 
-    closeModal('plan-match-modal');
-    addPlannedMatch(home, away, competition, kickoffAt);
+    const editingId = state.editingPlanId;
+    closePlanModal();
+
+    if (editingId) {
+      updatePlannedMatch(editingId, home, away, competition, kickoffAt);
+    } else {
+      addPlannedMatch(home, away, competition, kickoffAt);
+    }
   });
 
-  document.getElementById('plan-modal-cancel-btn').addEventListener('click', () => closeModal('plan-match-modal'));
+  document.getElementById('plan-modal-cancel-btn').addEventListener('click', closePlanModal);
   document.getElementById('plan-match-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeModal('plan-match-modal');
+    if (e.target === e.currentTarget) closePlanModal();
   });
 
   // Planned list: start or delete a planned match
@@ -700,6 +742,9 @@ function bindEvents() {
 
     if (target.dataset.planAction === 'start') {
       startPlannedMatch(id);
+    } else if (target.dataset.planAction === 'edit') {
+      const p = state.planned.find((x) => String(x.id) === id);
+      if (p) openPlanModal(p);
     } else if (target.dataset.planAction === 'delete') {
       const p = state.planned.find((x) => String(x.id) === id);
       if (!p) return;
