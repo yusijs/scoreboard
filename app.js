@@ -41,6 +41,7 @@ let state = {
   activeMatch: null,   // { id, homeTeam, awayTeam, homeScore, awayScore, goals, startedAt, elapsed, timerStartedAt, timerRunning, halfTime }
   history: [],
   timerInterval: null,
+  detailKey: null,   // match currently shown in the detail modal
 };
 
 // ===== Timer =====
@@ -191,30 +192,112 @@ function renderHistory() {
     const homeClass = m.homeScore > m.awayScore ? 'winner' : m.homeScore === m.awayScore ? 'draw' : '';
     const awayClass = m.awayScore > m.homeScore ? 'winner' : m.homeScore === m.awayScore ? 'draw' : '';
 
-    return `<li class="history-item">
+    const key = escapeHtml(matchKey(m));
+    const goalCount = (m.goals || []).length;
+
+    return `<li class="history-item" data-match-key="${key}">
       <div class="history-item-header">
         <span>${escapeHtml(date)} &bull; ${escapeHtml(time)}</span>
-        <span>${duration}'</span>
+        <span class="history-item-header-right">
+          <span>${duration}'</span>
+          <button class="history-delete-btn" data-action="delete" data-match-key="${key}" aria-label="Slett kamp" title="Slett kamp">✕</button>
+        </span>
       </div>
-      <div class="history-item-body">
-        <div class="history-team ${homeClass}">
-          <div class="history-team-name">${escapeHtml(m.homeTeam)}</div>
-          <div class="history-team-label">Hjemme</div>
+      <button type="button" class="history-item-body" data-action="detail" data-match-key="${key}" aria-label="Vis kampdetaljer">
+        <span class="history-team ${homeClass}">
+          <span class="history-team-name">${escapeHtml(m.homeTeam)}</span>
+          <span class="history-team-label">Hjemme</span>
           ${homeResult}
-        </div>
-        <div class="history-score">
+        </span>
+        <span class="history-score">
           <span class="history-score-num">${m.homeScore}</span>
           <span class="history-score-sep">:</span>
           <span class="history-score-num">${m.awayScore}</span>
-        </div>
-        <div class="history-team ${awayClass}">
-          <div class="history-team-name">${escapeHtml(m.awayTeam)}</div>
-          <div class="history-team-label">Borte</div>
+        </span>
+        <span class="history-team ${awayClass}">
+          <span class="history-team-name">${escapeHtml(m.awayTeam)}</span>
+          <span class="history-team-label">Borte</span>
           ${awayResult}
-        </div>
+        </span>
+      </button>
+      <div class="history-item-footer">
+        ${goalCount === 1 ? '1 mål' : `${goalCount} mål`} &bull; Trykk for detaljer
       </div>
     </li>`;
   }).join('');
+}
+
+// ===== Match Detail =====
+
+// Stable identifier for a stored match. Older entries always have an id,
+// but fall back to endedAt so nothing is unaddressable.
+function matchKey(m) {
+  return String(m.id || m.endedAt);
+}
+
+function findMatch(key) {
+  return state.history.find((m) => matchKey(m) === key) || null;
+}
+
+function openMatchDetail(key) {
+  const m = findMatch(key);
+  if (!m) return;
+
+  state.detailKey = key;
+  document.getElementById('match-detail-content').innerHTML = buildMatchDetailHtml(m);
+  openModal('match-detail-modal');
+}
+
+function buildMatchDetailHtml(m) {
+  const date = new Date(m.endedAt).toLocaleDateString(undefined, {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const time = new Date(m.endedAt).toLocaleTimeString(undefined, {
+    hour: '2-digit', minute: '2-digit',
+  });
+  const duration = Math.floor(m.elapsed / 60);
+
+  // Goals are appended chronologically, but sort defensively so the
+  // running score below is always computed in match order.
+  const goals = (m.goals || []).slice().sort((a, b) => a.elapsed - b.elapsed);
+
+  let running = { home: 0, away: 0 };
+  const timeline = goals.map((g) => {
+    const side = g.team === 'home' ? 'home' : 'away';
+    running[side] += 1;
+    const teamName = side === 'home' ? m.homeTeam : m.awayTeam;
+    const mins = Math.floor(g.elapsed / 60);
+    return `<li class="timeline-item ${side}">
+      <span class="timeline-min">${mins}'</span>
+      <span class="timeline-icon">⚽</span>
+      <span class="timeline-team">${escapeHtml(teamName)}</span>
+      <span class="timeline-score">${running.home}–${running.away}</span>
+    </li>`;
+  }).join('');
+
+  const timelineBlock = goals.length
+    ? `<ul class="timeline">${timeline}</ul>`
+    : '<p class="detail-empty">Ingen mål i denne kampen</p>';
+
+  return `
+    <div class="detail-summary">
+      <div class="detail-team">${escapeHtml(m.homeTeam)}</div>
+      <div class="detail-score">${m.homeScore}–${m.awayScore}</div>
+      <div class="detail-team">${escapeHtml(m.awayTeam)}</div>
+    </div>
+    <div class="detail-meta">${escapeHtml(date)} &bull; ${escapeHtml(time)} &bull; ${duration} min</div>
+    <h3 class="detail-section-title">Målrekkefølge</h3>
+    ${timelineBlock}
+  `;
+}
+
+function deleteMatch(key) {
+  const idx = state.history.findIndex((m) => matchKey(m) === key);
+  if (idx === -1) return;
+  state.history.splice(idx, 1);
+  saveHistory(state.history);
+  renderHistory();
+  showToast('Kamp slettet');
 }
 
 // ===== Actions =====
@@ -485,6 +568,47 @@ function bindEvents() {
 
   document.getElementById('reset-match-btn').addEventListener('click', () => {
     if (confirm('Nullstille poengstilling og klokke? Dette kan ikke angres.')) resetScore();
+  });
+
+  // History list: delete a single match, or open its details
+  document.getElementById('history-list').addEventListener('click', (e) => {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const key = target.dataset.matchKey;
+
+    if (target.dataset.action === 'delete') {
+      const m = findMatch(key);
+      if (!m) return;
+      if (confirm(`Slette kampen ${m.homeTeam} – ${m.awayTeam}? Dette kan ikke angres.`)) {
+        deleteMatch(key);
+      }
+    } else if (target.dataset.action === 'detail') {
+      openMatchDetail(key);
+    }
+  });
+
+  // Match detail modal
+  document.getElementById('detail-close-btn').addEventListener('click', () => {
+    closeModal('match-detail-modal');
+    state.detailKey = null;
+  });
+
+  document.getElementById('match-detail-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      closeModal('match-detail-modal');
+      state.detailKey = null;
+    }
+  });
+
+  document.getElementById('detail-delete-btn').addEventListener('click', () => {
+    const key = state.detailKey;
+    const m = findMatch(key);
+    if (!m) return;
+    if (confirm(`Slette kampen ${m.homeTeam} – ${m.awayTeam}? Dette kan ikke angres.`)) {
+      deleteMatch(key);
+      closeModal('match-detail-modal');
+      state.detailKey = null;
+    }
   });
 
   // Clear history
