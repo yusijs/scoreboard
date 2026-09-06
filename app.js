@@ -956,7 +956,8 @@ let toastTimeout = null;
 function showToast(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.classList.remove('hidden');
+  toast.classList.remove('hidden', 'toast-action');
+  toast.onclick = null;
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => toast.classList.add('hidden'), 2500);
 }
@@ -1258,11 +1259,46 @@ function bindEvents() {
 
 // ===== Service Worker Registration =====
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch((err) => {
+  if (!('serviceWorker' in navigator)) return;
+
+  // Whether this page load was already controlled tells us later whether a
+  // controller change is a first install or a genuine update.
+  const hadController = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker
+    // updateViaCache: 'none' keeps the browser from serving sw.js itself from
+    // the HTTP cache, so a new deploy is always detected.
+    .register('./sw.js', { updateViaCache: 'none' })
+    .then((registration) => {
+      registration.update().catch(() => {});
+
+      // An installed PWA can stay open for days; re-check whenever it is
+      // brought back to the foreground.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') registration.update().catch(() => {});
+      });
+    })
+    .catch((err) => {
       console.warn('Service worker registration failed:', err);
     });
-  }
+
+  let notified = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || notified) return;
+    notified = true;
+    showUpdatePrompt();
+  });
+}
+
+// A new version is active but this page is still running the old code.
+// Offer a reload rather than forcing one, which would be disruptive mid-match.
+function showUpdatePrompt() {
+  const toast = document.getElementById('toast');
+  toast.textContent = 'Ny versjon tilgjengelig – trykk for å oppdatere';
+  toast.classList.remove('hidden');
+  toast.classList.add('toast-action');
+  clearTimeout(toastTimeout);
+  toast.onclick = () => window.location.reload();
 }
 
 // ===== Init =====

@@ -1033,6 +1033,16 @@ body {
   animation: toastIn 0.2s ease-out;
 }
 
+/* Tappable variant used by the update prompt */
+.toast.toast-action {
+  pointer-events: auto;
+  cursor: pointer;
+  background: var(--green-mid);
+  white-space: normal;
+  max-width: min(90vw, 340px);
+  text-align: center;
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(12px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
