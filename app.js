@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   activeMatch: 'soccer_active_match',
   history: 'soccer_match_history',
   planned: 'soccer_planned_matches',
+  importUrl: 'soccer_import_url',
 };
 
 function loadActiveMatch() {
@@ -58,6 +59,7 @@ let state = {
   timerInterval: null,
   detailKey: null,      // match currently shown in the detail modal
   editingPlanId: null,  // plan being edited, null when planning a new match
+  importCandidates: [], // parsed calendar entries awaiting confirmation
 };
 
 // ===== Timer =====
@@ -495,6 +497,267 @@ function startPlannedMatch(id) {
   showToast('Kampen er i gang');
 }
 
+// ===== ICS Import =====
+
+// Undo RFC 5545 text escaping: \n \N -> newline, \\ \, \; -> literal.
+function unescapeIcsText(v) {
+  return v.replace(/\\([\\;,nN])/g, (_, c) => (c === 'n' || c === 'N' ? '\n' : c));
+}
+
+// Accepts 20260914T170000Z (UTC), 20260914T170000 (floating/TZID) and 20260914.
+// Values without a Z are read as local time, which is what we want for a
+// Norwegian calendar on a Norwegian device; a Z value is exact either way.
+function parseIcsDate(value) {
+  const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(String(value).trim());
+  if (!m) return NaN;
+  const [, y, mo, d, h, mi, s, z] = m;
+  const parts = [+y, +mo - 1, +d, +(h || 0), +(mi || 0), +(s || 0)];
+  return z ? Date.UTC(...parts) : new Date(...parts).getTime();
+}
+
+// Minimal VEVENT reader: unfolds continuation lines, then collects
+// property values and their parameters per event.
+function parseIcs(text) {
+  const unfolded = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n[ \t]/g, '');
+
+  const events = [];
+  let current = null;
+
+  for (const rawLine of unfolded.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (line.toUpperCase() === 'BEGIN:VEVENT') { current = {}; continue; }
+    if (line.toUpperCase() === 'END:VEVENT') {
+      if (current) events.push(current);
+      current = null;
+      continue;
+    }
+    if (!current) continue;
+
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+
+    const [name] = line.slice(0, colon).split(';');
+    current[name.toUpperCase()] = line.slice(colon + 1);
+  }
+
+  return events;
+}
+
+const TEAM_SEPARATORS = [' - ', ' – ', ' — ', ' vs ', ' vs. '];
+
+function splitTeams(s) {
+  for (const sep of TEAM_SEPARATORS) {
+    const i = s.indexOf(sep);
+    if (i > 0) {
+      const homeTeam = s.slice(0, i).trim();
+      const awayTeam = s.slice(i + sep.length).trim();
+      if (homeTeam && awayTeam) return { homeTeam, awayTeam };
+    }
+  }
+  return null;
+}
+
+// Summaries come in a few shapes, e.g. "Rosenborg - Molde" or
+// "4. divisjon: Rosenborg - Molde". Pull off a competition prefix only when
+// what remains still splits into two teams.
+function parseSummary(summary) {
+  let rest = summary.trim();
+  let competition = '';
+
+  const colon = rest.indexOf(':');
+  if (colon > 0) {
+    const after = rest.slice(colon + 1).trim();
+    if (splitTeams(after)) {
+      competition = rest.slice(0, colon).trim();
+      rest = after;
+    }
+  }
+
+  const teams = splitTeams(rest);
+  if (!teams) return null;
+  return { ...teams, competition };
+}
+
+function icsEventToMatch(ev) {
+  const summary = ev.SUMMARY ? unescapeIcsText(ev.SUMMARY) : '';
+  const kickoffAt = ev.DTSTART ? parseIcsDate(ev.DTSTART) : NaN;
+  if (!summary || Number.isNaN(kickoffAt)) return null;
+
+  const parsed = parseSummary(summary);
+  if (!parsed) return null;
+
+  let competition = parsed.competition;
+  if (!competition && ev.DESCRIPTION) {
+    const desc = unescapeIcsText(ev.DESCRIPTION);
+    const m = /(?:turnering|konkurranse|serie)\s*[:\-]\s*(.+)/i.exec(desc);
+    if (m) competition = m[1].split('\n')[0].trim();
+  }
+
+  return {
+    uid: ev.UID ? ev.UID.trim() : '',
+    homeTeam: parsed.homeTeam,
+    awayTeam: parsed.awayTeam,
+    competition,
+    kickoffAt,
+  };
+}
+
+// Finds the planned match an imported event corresponds to. Prefers the
+// calendar UID so a moved fixture is recognised as the same match.
+function findExistingPlan(candidate) {
+  if (candidate.uid) {
+    const byUid = state.planned.find((p) => p.sourceUid && p.sourceUid === candidate.uid);
+    if (byUid) return byUid;
+  }
+  return state.planned.find((p) =>
+    !p.sourceUid
+    && p.homeTeam === candidate.homeTeam
+    && p.awayTeam === candidate.awayTeam
+    && p.kickoffAt === candidate.kickoffAt) || null;
+}
+
+function classifyCandidate(candidate) {
+  const existing = findExistingPlan(candidate);
+  if (!existing) return { status: 'new', existing: null };
+
+  const changed = existing.kickoffAt !== candidate.kickoffAt
+    || existing.homeTeam !== candidate.homeTeam
+    || existing.awayTeam !== candidate.awayTeam
+    || (existing.competition || '') !== (candidate.competition || '');
+
+  return { status: changed ? 'updated' : 'unchanged', existing };
+}
+
+async function fetchAndParseCalendar(url) {
+  const res = await fetch(url, { headers: { Accept: 'text/calendar, text/plain, */*' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const text = await res.text();
+  if (!/BEGIN:VEVENT/i.test(text)) throw new Error('NOT_CALENDAR');
+
+  const events = parseIcs(text);
+  const candidates = [];
+  let skipped = 0;
+
+  for (const ev of events) {
+    const match = icsEventToMatch(ev);
+    if (match) candidates.push(match);
+    else skipped += 1;
+  }
+
+  return { candidates, skipped, total: events.length };
+}
+
+function renderImportPreview(result) {
+  const previewEl = document.getElementById('import-preview');
+  const confirmBtn = document.getElementById('import-confirm-btn');
+
+  const classified = result.candidates
+    .map((c) => ({ ...c, ...classifyCandidate(c) }))
+    .sort((a, b) => a.kickoffAt - b.kickoffAt);
+
+  state.importCandidates = classified;
+
+  if (classified.length === 0) {
+    previewEl.classList.add('hidden');
+    confirmBtn.classList.add('hidden');
+    return;
+  }
+
+  const labels = { new: 'Ny', updated: 'Flyttet', unchanged: 'Importert' };
+
+  previewEl.innerHTML = classified.map((c, i) => {
+    const selectable = c.status !== 'unchanged';
+    return `<label class="import-item ${c.status}">
+      <input type="checkbox" class="import-check" data-idx="${i}"
+             ${selectable ? 'checked' : 'disabled'} />
+      <span class="import-item-main">
+        <span class="import-item-teams">${escapeHtml(c.homeTeam)} – ${escapeHtml(c.awayTeam)}</span>
+        <span class="import-item-meta">
+          ${escapeHtml(formatKickoff(c.kickoffAt))}${c.competition ? ` &bull; ${escapeHtml(c.competition)}` : ''}
+        </span>
+      </span>
+      <span class="import-badge ${c.status}">${labels[c.status]}</span>
+    </label>`;
+  }).join('');
+
+  previewEl.classList.remove('hidden');
+  confirmBtn.classList.remove('hidden');
+  updateImportConfirmLabel();
+}
+
+function updateImportConfirmLabel() {
+  const checked = document.querySelectorAll('.import-check:checked').length;
+  const btn = document.getElementById('import-confirm-btn');
+  btn.textContent = checked === 1 ? 'Importer 1 kamp' : `Importer ${checked} kamper`;
+  btn.disabled = checked === 0;
+}
+
+function setImportStatus(message, kind) {
+  const el = document.getElementById('import-status');
+  if (!message) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.className = `import-status ${kind || ''}`;
+}
+
+function applyImport() {
+  const selected = [...document.querySelectorAll('.import-check:checked')]
+    .map((cb) => state.importCandidates[Number(cb.dataset.idx)])
+    .filter(Boolean);
+
+  let added = 0;
+  let updated = 0;
+
+  for (const c of selected) {
+    const existing = findExistingPlan(c);
+    if (existing) {
+      existing.homeTeam = c.homeTeam;
+      existing.awayTeam = c.awayTeam;
+      existing.competition = c.competition;
+      existing.kickoffAt = c.kickoffAt;
+      if (c.uid) existing.sourceUid = c.uid;
+      updated += 1;
+    } else {
+      state.planned.push({
+        id: `${Date.now()}-${added}`,
+        homeTeam: c.homeTeam,
+        awayTeam: c.awayTeam,
+        competition: c.competition,
+        kickoffAt: c.kickoffAt,
+        sourceUid: c.uid || undefined,
+      });
+      added += 1;
+    }
+  }
+
+  savePlanned(state.planned);
+  renderPlanned();
+  closeModal('import-modal');
+
+  const parts = [];
+  if (added) parts.push(added === 1 ? '1 ny kamp' : `${added} nye kamper`);
+  if (updated) parts.push(updated === 1 ? '1 oppdatert' : `${updated} oppdatert`);
+  showToast(parts.length ? `Importert: ${parts.join(', ')}` : 'Ingen endringer');
+}
+
+function openImportModal() {
+  document.getElementById('import-url-input').value =
+    localStorage.getItem(STORAGE_KEYS.importUrl) || '';
+  document.getElementById('import-preview').classList.add('hidden');
+  document.getElementById('import-confirm-btn').classList.add('hidden');
+  state.importCandidates = [];
+  setImportStatus('');
+  openModal('import-modal');
+}
+
 // ===== Actions =====
 function createMatch(homeTeam, awayTeam, competition) {
   state.activeMatch = {
@@ -733,6 +996,64 @@ function bindEvents() {
   document.getElementById('plan-match-modal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closePlanModal();
   });
+
+  // Import from calendar URL
+  document.getElementById('import-matches-btn').addEventListener('click', openImportModal);
+  document.getElementById('import-matches-empty-btn').addEventListener('click', openImportModal);
+  document.getElementById('import-cancel-btn').addEventListener('click', () => closeModal('import-modal'));
+  document.getElementById('import-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal('import-modal');
+  });
+
+  document.getElementById('import-fetch-btn').addEventListener('click', async () => {
+    const input = document.getElementById('import-url-input');
+    const btn = document.getElementById('import-fetch-btn');
+    const url = input.value.trim();
+
+    input.classList.remove('error');
+    document.getElementById('import-preview').classList.add('hidden');
+    document.getElementById('import-confirm-btn').classList.add('hidden');
+
+    if (!url) {
+      input.classList.add('error');
+      setImportStatus('Skriv inn en kalender-URL.', 'error');
+      return;
+    }
+
+    btn.disabled = true;
+    setImportStatus('Henter kalender…', '');
+
+    try {
+      const result = await fetchAndParseCalendar(url);
+      localStorage.setItem(STORAGE_KEYS.importUrl, url);
+
+      if (result.candidates.length === 0) {
+        setImportStatus('Fant ingen kamper i kalenderen.', 'error');
+      } else {
+        const skipped = result.skipped
+          ? ` ${result.skipped} hendelse${result.skipped === 1 ? '' : 'r'} kunne ikke tolkes.`
+          : '';
+        setImportStatus(`Fant ${result.candidates.length} kamper.${skipped}`, 'ok');
+        renderImportPreview(result);
+      }
+    } catch (err) {
+      if (err && err.message === 'NOT_CALENDAR') {
+        setImportStatus('Fant ingen kalenderdata på denne adressen.', 'error');
+      } else if (err && /^HTTP /.test(err.message || '')) {
+        setImportStatus(`Serveren svarte med ${err.message}.`, 'error');
+      } else {
+        setImportStatus('Kunne ikke hente kalenderen. Sjekk URL-en og nettforbindelsen.', 'error');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('import-preview').addEventListener('change', (e) => {
+    if (e.target.classList.contains('import-check')) updateImportConfirmLabel();
+  });
+
+  document.getElementById('import-confirm-btn').addEventListener('click', applyImport);
 
   // Planned list: start or delete a planned match
   document.getElementById('planned-list').addEventListener('click', (e) => {

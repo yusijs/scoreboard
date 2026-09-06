@@ -110,12 +110,16 @@
     <main id="tab-planned" class="tab-content">
       <div class="history-header">
         <h2 class="section-title">Planlagte kamper</h2>
-        <button id="plan-match-btn" class="btn btn-sm btn-outline">Ny plan</button>
+        <span class="header-actions">
+          <button id="import-matches-btn" class="btn btn-sm btn-outline">Importer</button>
+          <button id="plan-match-btn" class="btn btn-sm btn-outline">Ny plan</button>
+        </span>
       </div>
       <div id="planned-empty" class="empty-state">
         <div class="empty-icon">📅</div>
         <p class="empty-text">Ingen planlagte kamper</p>
         <button id="plan-match-empty-btn" class="btn btn-primary btn-lg">Planlegg kamp</button>
+        <button id="import-matches-empty-btn" class="btn btn-outline">Importer fra kalender</button>
       </div>
       <ul id="planned-list" class="planned-list hidden"></ul>
     </main>
@@ -178,6 +182,32 @@
           <button type="submit" class="btn btn-primary">Spark i gang!</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Import Matches Modal -->
+  <div id="import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div class="modal modal-detail">
+      <h2 id="import-modal-title" class="modal-title">Importer kamper</h2>
+
+      <div class="form-group">
+        <label for="import-url-input" class="form-label">Kalender-URL (.ics)</label>
+        <input
+          id="import-url-input"
+          type="url"
+          class="form-input"
+          placeholder="https://www.fotball.no/footballapi/Calendar/GetCalendar?teamId=..."
+        />
+      </div>
+      <button type="button" id="import-fetch-btn" class="btn btn-primary import-fetch-btn">Hent kamper</button>
+
+      <div id="import-status" class="import-status hidden" role="status" aria-live="polite"></div>
+      <div id="import-preview" class="import-preview hidden"></div>
+
+      <div class="form-actions">
+        <button type="button" id="import-cancel-btn" class="btn btn-outline">Lukk</button>
+        <button type="button" id="import-confirm-btn" class="btn btn-primary hidden">Importer</button>
+      </div>
     </div>
   </div>
 
