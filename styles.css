@@ -748,6 +748,17 @@ body {
   cursor: default;
 }
 
+/* Already-played fixtures: still selectable, just visually de-emphasised */
+.import-item.past .import-item-teams { color: var(--gray-600); }
+.import-item.past .import-item-meta { color: var(--gray-400); }
+
+.form-hint {
+  font-size: 0.74rem;
+  color: var(--gray-600);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
 .import-check {
   width: 18px;
   height: 18px;

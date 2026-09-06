@@ -499,6 +499,44 @@ function startPlannedMatch(id) {
 
 // ===== ICS Import =====
 
+const FOTBALL_CALENDAR_ENDPOINT =
+  'https://www.fotball.no/footballapi/Calendar/GetCalendar?teamId=';
+
+// Query params that carry a fotball.no team id.
+const TEAM_ID_PARAMS = ['fiksid', 'teamid'];
+
+// Accepts a team page (…/lag/hjem/?fiksId=163934), a bare team id, or any
+// .ics URL, and returns the address to actually fetch. Anything unrecognised
+// is passed through untouched so other calendar providers still work.
+function resolveCalendarUrl(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+
+  if (/^\d+$/.test(raw)) return FOTBALL_CALENDAR_ENDPOINT + raw;
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    try {
+      url = new URL(`https://${raw}`);
+    } catch {
+      return raw;
+    }
+  }
+
+  // Already a calendar feed — leave it alone.
+  if (/GetCalendar/i.test(url.pathname + url.search)) return url.href;
+
+  for (const [key, value] of url.searchParams) {
+    if (TEAM_ID_PARAMS.includes(key.toLowerCase()) && /^\d+$/.test(value)) {
+      return FOTBALL_CALENDAR_ENDPOINT + value;
+    }
+  }
+
+  return url.href;
+}
+
 // Undo RFC 5545 text escaping: \n \N -> newline, \\ \, \; -> literal.
 function unescapeIcsText(v) {
   return v.replace(/\\([\\;,nN])/g, (_, c) => (c === 'n' || c === 'N' ? '\n' : c));
@@ -666,16 +704,20 @@ function renderImportPreview(result) {
   if (classified.length === 0) {
     previewEl.classList.add('hidden');
     confirmBtn.classList.add('hidden');
-    return;
+    return classified;
   }
 
   const labels = { new: 'Ny', updated: 'Flyttet', unchanged: 'Importert' };
+  const now = Date.now();
 
   previewEl.innerHTML = classified.map((c, i) => {
     const selectable = c.status !== 'unchanged';
-    return `<label class="import-item ${c.status}">
+    const past = c.kickoffAt < now;
+    // Already-played fixtures stay selectable but are not preselected.
+    const checked = selectable && !past;
+    return `<label class="import-item ${c.status}${past ? ' past' : ''}">
       <input type="checkbox" class="import-check" data-idx="${i}"
-             ${selectable ? 'checked' : 'disabled'} />
+             ${checked ? 'checked' : ''} ${selectable ? '' : 'disabled'} />
       <span class="import-item-main">
         <span class="import-item-teams">${escapeHtml(c.homeTeam)} – ${escapeHtml(c.awayTeam)}</span>
         <span class="import-item-meta">
@@ -689,6 +731,8 @@ function renderImportPreview(result) {
   previewEl.classList.remove('hidden');
   confirmBtn.classList.remove('hidden');
   updateImportConfirmLabel();
+
+  return classified;
 }
 
 function updateImportConfirmLabel() {
@@ -1008,7 +1052,8 @@ function bindEvents() {
   document.getElementById('import-fetch-btn').addEventListener('click', async () => {
     const input = document.getElementById('import-url-input');
     const btn = document.getElementById('import-fetch-btn');
-    const url = input.value.trim();
+    const raw = input.value.trim();
+    const url = resolveCalendarUrl(raw);
 
     input.classList.remove('error');
     document.getElementById('import-preview').classList.add('hidden');
@@ -1016,7 +1061,7 @@ function bindEvents() {
 
     if (!url) {
       input.classList.add('error');
-      setImportStatus('Skriv inn en kalender-URL.', 'error');
+      setImportStatus('Lim inn lagets side, en kalender-URL eller en lag-ID.', 'error');
       return;
     }
 
@@ -1025,16 +1070,21 @@ function bindEvents() {
 
     try {
       const result = await fetchAndParseCalendar(url);
-      localStorage.setItem(STORAGE_KEYS.importUrl, url);
+      localStorage.setItem(STORAGE_KEYS.importUrl, raw);
 
       if (result.candidates.length === 0) {
         setImportStatus('Fant ingen kamper i kalenderen.', 'error');
       } else {
+        const classified = renderImportPreview(result);
+        const past = classified.filter((c) => c.kickoffAt < Date.now()).length;
+
         const skipped = result.skipped
           ? ` ${result.skipped} hendelse${result.skipped === 1 ? '' : 'r'} kunne ikke tolkes.`
           : '';
-        setImportStatus(`Fant ${result.candidates.length} kamper.${skipped}`, 'ok');
-        renderImportPreview(result);
+        const played = past
+          ? ` ${past} er allerede spilt og er ikke forhåndsvalgt.`
+          : '';
+        setImportStatus(`Fant ${result.candidates.length} kamper.${skipped}${played}`, 'ok');
       }
     } catch (err) {
       if (err && err.message === 'NOT_CALENDAR') {

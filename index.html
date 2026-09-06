@@ -191,13 +191,16 @@
       <h2 id="import-modal-title" class="modal-title">Importer kamper</h2>
 
       <div class="form-group">
-        <label for="import-url-input" class="form-label">Kalender-URL (.ics)</label>
+        <label for="import-url-input" class="form-label">Lagets side eller kalender-URL</label>
         <input
           id="import-url-input"
-          type="url"
+          type="text"
           class="form-input"
-          placeholder="https://www.fotball.no/footballapi/Calendar/GetCalendar?teamId=..."
+          placeholder="https://www.fotball.no/fotballdata/lag/hjem/?fiksId=163934"
         />
+        <p class="form-hint">
+          Lim inn lagets side på fotball.no, en .ics-adresse, eller bare lag-ID-en.
+        </p>
       </div>
       <button type="button" id="import-fetch-btn" class="btn btn-primary import-fetch-btn">Hent kamper</button>
 
