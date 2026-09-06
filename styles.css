@@ -911,6 +911,19 @@ body {
   min-height: 0;
 }
 
+.detail-actions {
+  margin-top: 20px;
+}
+
+.detail-actions .btn {
+  width: 100%;
+}
+
+/* Share sits on its own row, so the pair below needs less separation */
+.modal-detail .form-actions {
+  margin-top: 10px;
+}
+
 .detail-competition {
   text-align: center;
   margin-bottom: 12px;

@@ -322,6 +322,43 @@ function buildMatchDetailHtml(m) {
   `;
 }
 
+// Plain text for sharing — deliberately short, since this is mostly used for
+// barnefotball where a goal-by-goal rundown is more than anyone needs.
+function buildShareText(m) {
+  // Pinned to nb-NO rather than the device locale: the message itself is
+  // Norwegian, so the date should not switch language on an English phone.
+  const date = new Date(m.endedAt).toLocaleDateString('nb-NO', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const context = m.competition ? `${m.competition} • ${date}` : date;
+  return `⚽ ${m.homeTeam} ${m.homeScore}–${m.awayScore} ${m.awayTeam}\n${context}`;
+}
+
+async function shareMatch(key) {
+  const m = findMatch(key);
+  if (!m) return;
+
+  const text = buildShareText(m);
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (err) {
+      // Dismissing the share sheet is not a failure worth reporting.
+      if (err && err.name === 'AbortError') return;
+      // Anything else falls through to the clipboard.
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Resultat kopiert');
+  } catch {
+    showToast('Kunne ikke dele resultatet');
+  }
+}
+
 function deleteMatch(key) {
   const idx = state.history.findIndex((m) => matchKey(m) === key);
   if (idx === -1) return;
@@ -1226,6 +1263,10 @@ function bindEvents() {
       closeModal('match-detail-modal');
       state.detailKey = null;
     }
+  });
+
+  document.getElementById('detail-share-btn').addEventListener('click', () => {
+    if (state.detailKey) shareMatch(state.detailKey);
   });
 
   document.getElementById('detail-delete-btn').addEventListener('click', () => {
