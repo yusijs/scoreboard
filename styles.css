@@ -457,6 +457,28 @@ body {
   color: var(--gray-800);
 }
 
+.search-wrap {
+  margin-bottom: 12px;
+}
+
+.search-wrap .form-input {
+  font-size: 0.9rem;
+  padding: 10px 12px;
+}
+
+/* Hide WebKit's default search decorations; type=search still gives the
+   native clear button, which we keep. */
+.search-wrap input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+.history-count {
+  font-size: 0.75rem;
+  color: var(--gray-600);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
 .history-list {
   list-style: none;
   display: flex;

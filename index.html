@@ -130,9 +130,24 @@
         <h2 class="section-title">Kamphistorikk</h2>
         <button id="clear-history-btn" class="btn btn-sm btn-danger-outline">Slett alt</button>
       </div>
+      <div id="history-search-wrap" class="search-wrap hidden">
+        <input
+          id="history-search"
+          type="search"
+          class="form-input"
+          placeholder="Søk etter lag eller turnering"
+          aria-label="Søk i kamphistorikk"
+          autocomplete="off"
+        />
+      </div>
+      <div id="history-count" class="history-count hidden" role="status" aria-live="polite"></div>
       <div id="history-empty" class="empty-state">
         <div class="empty-icon">📋</div>
         <p class="empty-text">Ingen kamper registrert ennå</p>
+      </div>
+      <div id="history-no-results" class="empty-state hidden">
+        <div class="empty-icon">🔍</div>
+        <p class="empty-text">Ingen kamper matcher søket</p>
       </div>
       <ul id="history-list" class="history-list hidden"></ul>
     </main>

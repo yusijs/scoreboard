@@ -58,6 +58,7 @@ let state = {
   planned: [],       // upcoming matches: { id, homeTeam, awayTeam, competition, kickoffAt }
   timerInterval: null,
   detailKey: null,      // match currently shown in the detail modal
+  historyQuery: '',     // current search term in the history tab
   editingPlanId: null,  // plan being edited, null when planning a new match
   importCandidates: [], // parsed calendar entries awaiting confirmation
 };
@@ -180,21 +181,60 @@ function renderGoalLog() {
   list.scrollTop = list.scrollHeight;
 }
 
+// Every search term must appear somewhere in the teams or competition, so
+// "heming lyn" finds that fixture regardless of which side each team was on.
+function filterHistory(history, query) {
+  const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return history;
+
+  return history.filter((m) => {
+    const haystack = `${m.homeTeam} ${m.awayTeam} ${m.competition || ''}`.toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  });
+}
+
 function renderHistory() {
   const listEl = document.getElementById('history-list');
   const emptyEl = document.getElementById('history-empty');
+  const noResultsEl = document.getElementById('history-no-results');
+  const searchWrap = document.getElementById('history-search-wrap');
+  const countEl = document.getElementById('history-count');
   const history = state.history;
 
+  // With nothing recorded there is nothing to search, so hide the field too.
   if (history.length === 0) {
     listEl.classList.add('hidden');
+    noResultsEl.classList.add('hidden');
+    countEl.classList.add('hidden');
+    searchWrap.classList.add('hidden');
     emptyEl.classList.remove('hidden');
     return;
   }
 
   emptyEl.classList.add('hidden');
+  searchWrap.classList.remove('hidden');
+
+  const searching = state.historyQuery.trim().length > 0;
+  const matches = filterHistory(history, state.historyQuery);
+
+  if (matches.length === 0) {
+    listEl.classList.add('hidden');
+    countEl.classList.add('hidden');
+    noResultsEl.classList.remove('hidden');
+    return;
+  }
+
+  noResultsEl.classList.add('hidden');
   listEl.classList.remove('hidden');
 
-  listEl.innerHTML = history.slice().reverse().map((m) => {
+  if (searching) {
+    countEl.textContent = `Viser ${matches.length} av ${history.length} kamper`;
+    countEl.classList.remove('hidden');
+  } else {
+    countEl.classList.add('hidden');
+  }
+
+  listEl.innerHTML = matches.slice().reverse().map((m) => {
     const date = new Date(m.endedAt).toLocaleDateString(undefined, {
       weekday: 'short', month: 'short', day: 'numeric',
     });
@@ -1278,6 +1318,12 @@ function bindEvents() {
       closeModal('match-detail-modal');
       state.detailKey = null;
     }
+  });
+
+  // Search history
+  document.getElementById('history-search').addEventListener('input', (e) => {
+    state.historyQuery = e.target.value;
+    renderHistory();
   });
 
   // Clear history
